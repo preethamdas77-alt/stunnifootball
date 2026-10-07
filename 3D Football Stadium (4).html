@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Floodlit Football Stadium 3D</title>
+<style>
+:root{--bg:#07140c;--fg:#f4f7f2;--chip:rgba(7,20,12,.7);--accent:#e8f25c;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#07140c;--fg:#f4f7f2;--chip:rgba(7,20,12,.7)}}
+:root[data-theme="dark"]{--bg:#07140c;--fg:#f4f7f2;--chip:rgba(7,20,12,.7)}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:Georgia,"Times New Roman",serif;overflow:hidden}
+#wrap{position:relative;height:100%;width:100%}
+canvas{display:block;touch-action:none}
+#hud{position:absolute;left:12px;top:12px;max-width:80%;background:var(--chip);padding:8px 12px;border-radius:8px;pointer-events:none}
+#hud h1{margin:0;font-size:18px;font-weight:700}
+#hud p{margin:4px 0 0;font-size:12px;opacity:.85;font-family:system-ui,sans-serif}
+#goal{position:absolute;left:0;right:0;top:35%;text-align:center;font-size:clamp(40px,12vw,96px);font-weight:700;color:var(--accent);opacity:0;transition:opacity .25s;pointer-events:none;text-shadow:0 3px 12px #000}
+#pad{position:absolute;left:14px;bottom:18px;display:none;grid-template-columns:repeat(3,52px);grid-template-rows:repeat(2,52px);gap:6px}
+#pad button{border:0;border-radius:10px;background:var(--chip);color:var(--fg);font-size:20px;touch-action:none}
+#pad button:focus-visible{outline:2px solid var(--accent)}
+#pad .u{grid-column:2;grid-row:1}#pad .l{grid-column:1;grid-row:2}#pad .d{grid-column:2;grid-row:2}#pad .r{grid-column:3;grid-row:2}
+</style>
+</head>
+<body>
+<div id="wrap">
+<div id="hud"><h1>Floodlit Football Stadium</h1><p>Drag to look. WASD or arrows to move, Shift to sprint. Walk into the ball to kick it.</p></div>
+<div id="goal">GOAL!</div>
+<div id="pad"><button class="u" data-k="w">▲</button><button class="l" data-k="a">◀</button><button class="d" data-k="s">▼</button><button class="r" data-k="d">▶</button></div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const wrap=document.getElementById('wrap');
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.outputEncoding=THREE.sRGBEncoding;
+wrap.prepend(renderer.domElement);
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x0a1428);
+scene.fog=new THREE.Fog(0x0a1428,60,260);
+const cam=new THREE.PerspectiveCamera(70,1,0.1,500);
+cam.rotation.order='YXZ';
+function resize(){const w=wrap.clientWidth,h=wrap.clientHeight;renderer.setSize(w,h);renderer.setPixelRatio(Math.min(devicePixelRatio,2));cam.aspect=w/h;cam.updateProjectionMatrix();}
+addEventListener('resize',resize);resize();
+
+// Lights
+scene.add(new THREE.HemisphereLight(0xbcd0ff,0x1a2a1a,0.55));
+[[-82,-62],[82,-62],[-82,62],[82,62]].forEach(([x,z])=>{
+  const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.7,35),new THREE.MeshStandardMaterial({color:0x555b66}));
+  pole.position.set(x,17.5,z);
+  const head=new THREE.Mesh(new THREE.BoxGeometry(7,3,1),new THREE.MeshBasicMaterial({color:0xfffbe0}));
+  head.position.set(x,36,z);head.lookAt(0,0,0);
+  const s=new THREE.SpotLight(0xfff4d6,0.9,260,0.8,0.5);
+  s.position.set(x,36,z);s.target.position.set(0,0,0);
+  scene.add(pole,head,s,s.target);
+});
+
+// Pitch texture (10px per metre, 5m margin)
+const c=document.createElement('canvas');c.width=1150;c.height=780;
+const g=c.getContext('2d');
+for(let i=0;i<23;i++){g.fillStyle=i%2?'#2f8f43':'#379b4d';g.fillRect(i*50,0,50,780);}
+g.strokeStyle='#fff';g.lineWidth=3;
+const X0=50,Y0=50,W=1050,H=680,CY=Y0+H/2,CX=X0+W/2;
+g.strokeRect(X0,Y0,W,H);
+g.beginPath();g.moveTo(CX,Y0);g.lineTo(CX,Y0+H);g.stroke();
+g.beginPath();g.arc(CX,CY,91.5,0,7);g.stroke();
+g.fillStyle='#fff';g.beginPath();g.arc(CX,CY,4,0,7);g.fill();
+const a=Math.acos(55/91.5);
+[[X0,1],[X0+W,-1]].forEach(([x,d])=>{
+  g.strokeRect(d>0?x:x-165,CY-201.6,165,403.2);
+  g.strokeRect(d>0?x:x-55,CY-91.5,55,183);
+  g.beginPath();g.arc(x+d*110,CY,4,0,7);g.fill();
+  g.beginPath();
+  if(d>0)g.arc(x+110,CY,91.5,-a,a);else g.arc(x-110,CY,91.5,Math.PI-a,Math.PI+a);
+  g.stroke();
+});
+const tex=new THREE.CanvasTexture(c);tex.encoding=THREE.sRGBEncoding;tex.anisotropy=8;
+const pitch=new THREE.Mesh(new THREE.PlaneGeometry(115,78),new THREE.MeshStandardMaterial({map:tex}));
+pitch.rotation.x=-Math.PI/2;scene.add(pitch);
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(500,500),new THREE.MeshStandardMaterial({color:0x14201a}));
+ground.rotation.x=-Math.PI/2;ground.position.y=-0.02;scene.add(ground);
+
+// Goals
+const white=new THREE.MeshStandardMaterial({color:0xffffff});
+function goal(x,d){
+  const gr=new THREE.Group();
+  [-3.66,3.66].forEach(z=>{const p=new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.07,2.44),white);p.position.set(0,1.22,z);gr.add(p);});
+  const bar=new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.07,7.32),white);
+  bar.rotation.x=Math.PI/2;bar.position.y=2.44;gr.add(bar);
+  const net=new THREE.Mesh(new THREE.BoxGeometry(2,2.44,7.32,4,4,12),new THREE.MeshBasicMaterial({color:0xffffff,wireframe:true,transparent:true,opacity:0.35}));
+  net.position.set(d*1,1.22,0);gr.add(net);
+  gr.position.x=x;scene.add(gr);
+}
+goal(-52.5,-1);goal(52.5,1);
+
+// Stands
+function stand(dx,dz,len){
+  for(let i=0;i<10;i++){
+    const h=(i+1)*0.9,d=1.6;
+    const m=new THREE.Mesh(new THREE.BoxGeometry(dz?len:d,h,dz?d:len),new THREE.MeshStandardMaterial({color:i%2?0x23408f:0x2b3342}));
+    m.position.set(dz?0:dx*(60.5+i*d),h/2,dz?dz*(41+i*d):0);
+    scene.add(m);
+  }
+}
+stand(0,1,130);stand(0,-1,130);stand(1,0,90);stand(-1,0,90);
+
+// Ball
+const bc=document.createElement('canvas');bc.width=bc.height=128;
+const bg=bc.getContext('2d');bg.fillStyle='#fff';bg.fillRect(0,0,128,128);bg.fillStyle='#111';
+[[20,20],[64,64],[108,20],[20,108],[108,108],[64,10],[64,118],[10,64],[118,64]].forEach(([x,y])=>{bg.beginPath();bg.arc(x,y,13,0,7);bg.fill();});
+const ball=new THREE.Mesh(new THREE.SphereGeometry(0.22,24,16),new THREE.MeshStandardMaterial({map:new THREE.CanvasTexture(bc)}));
+ball.position.set(0,0.22,0);scene.add(ball);
+let bv=new THREE.Vector3();
+
+// Controls
+let yaw=-Math.PI/2,pitchA=-0.05;
+cam.position.set(-20,1.7,0);
+const keys={};
+const map={ArrowUp:'w',ArrowDown:'s',ArrowLeft:'a',ArrowRight:'d'};
+addEventListener('keydown',e=>{keys[map[e.key]||e.key.toLowerCase()]=true;});
+addEventListener('keyup',e=>{keys[map[e.key]||e.key.toLowerCase()]=false;});
+let drag=null;
+const cv=renderer.domElement;
+cv.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY};cv.setPointerCapture(e.pointerId);});
+cv.addEventListener('pointermove',e=>{if(!drag)return;yaw-=(e.clientX-drag.x)*0.005;pitchA=Math.max(-1.2,Math.min(1.2,pitchA-(e.clientY-drag.y)*0.005));drag={x:e.clientX,y:e.clientY};});
+cv.addEventListener('pointerup',()=>drag=null);
+cv.addEventListener('pointercancel',()=>drag=null);
+if('ontouchstart' in window){document.getElementById('pad').style.display='grid';}
+document.querySelectorAll('#pad button').forEach(b=>{
+  const k=b.dataset.k;
+  b.addEventListener('pointerdown',e=>{keys[k]=true;b.setPointerCapture(e.pointerId);});
+  ['pointerup','pointercancel'].forEach(t=>b.addEventListener(t,()=>keys[k]=false));
+});
+
+// Goal message
+const goalEl=document.getElementById('goal');let scored=false;
+function onGoal(){scored=true;goalEl.style.opacity=1;setTimeout(()=>{goalEl.style.opacity=0;ball.position.set(0,0.22,0);bv.set(0,0,0);scored=false;},2200);}
+
+// Loop
+let last=performance.now();
+function loop(now){
+  const dt=Math.min((now-last)/1000,0.05);last=now;
+  const sp=keys.shift?11:6;
+  let f=(keys.w?1:0)-(keys.s?1:0),r=(keys.d?1:0)-(keys.a?1:0);
+  const fx=-Math.sin(yaw),fz=-Math.cos(yaw);
+  const mx=(fx*f+Math.cos(yaw)*r),mz=(fz*f-Math.sin(yaw)*r);
+  const len=Math.hypot(mx,mz);
+  let moving=len>0;
+  if(moving){cam.position.x+=mx/len*sp*dt;cam.position.z+=mz/len*sp*dt;}
+  cam.position.x=Math.max(-58,Math.min(58,cam.position.x));
+  cam.position.z=Math.max(-39,Math.min(39,cam.position.z));
+  cam.rotation.set(pitchA,yaw,0);
+
+  // Ball
+  const dx=ball.position.x-cam.position.x,dz=ball.position.z-cam.position.z,dist=Math.hypot(dx,dz);
+  if(dist<1.1&&moving&&!scored){bv.set(dx/dist,0,dz/dist).multiplyScalar(Math.max(8,sp*1.6));}
+  ball.position.addScaledVector(bv,dt);
+  bv.multiplyScalar(Math.pow(0.45,dt));
+  if(bv.length()<0.05)bv.set(0,0,0);
+  if(bv.lengthSq()>0){ball.rotation.x+=bv.z*dt/0.22;ball.rotation.z-=bv.x*dt/0.22;}
+  if(Math.abs(ball.position.z)>38){ball.position.z=Math.sign(ball.position.z)*38;bv.z*=-0.6;}
+  if(Math.abs(ball.position.x)>52.5&&Math.abs(ball.position.z)<3.66&&!scored&&Math.abs(ball.position.x)>53){onGoal();}
+  if(Math.abs(ball.position.x)>56){ball.position.x=Math.sign(ball.position.x)*56;bv.x*=-0.6;}
+
+  renderer.render(scene,cam);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
